@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from torch import nn
+import torch
 
 
 @dataclass
@@ -44,12 +45,9 @@ class MultiHeadAttention(nn.Module):
         )  # [batch, n_head, block_size, d_model_per_head]
         k = k.view(batch, block_size, n_head, d_model_per_head).transpose(1, 2)
         v = v.view(batch, block_size, n_head, d_model_per_head).transpose(1, 2)
-        scores = q @ k.transpose(2, 3) / (d_model_per_head**0.5)
-        if attention_mask is not None:
-            scores = scores.masked_fill(attention_mask == 0, float("-inf"))
-        rescaled_scores = scores - scores.max(dim=-1).values.unsqueeze(-1)
-        attention = nn.functional.softmax(rescaled_scores, dim=-1)
-        H = attention @ v
+        H = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v, attn_mask=attention_mask
+        )
         H = H.transpose(1, 2).contiguous().view(batch, block_size, d_model)
         H = self.output["dense"](H)
         H = self.output["LayerNorm"](x + H)
@@ -75,14 +73,20 @@ class EncoderLayer(nn.Module):
             }
         )
 
-    def forward(self, hidden_states, attention_mask):
-        pass
+    def forward(self, x, attention_mask=None):
+        x_attention = self.attention(x, attention_mask)
+        x_intermediate = self.intermediate["dense"](x_attention)
+        x_intermediate = nn.functional.gelu(x_intermediate)
+        x_output = self.output["dense"](x_intermediate)
+        x_output = self.output["LayerNorm"](x_attention + x_output)
+        return x_output
 
 
 class BertModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        torch.manual_seed(42)  # Set fixed seed for reproducibility
         self.embeddings = nn.ModuleDict(
             {
                 "word_embeddings": nn.Embedding(config.vocab_size, config.d_model),
@@ -104,5 +108,14 @@ class BertModel(nn.Module):
             }
         )
 
-    def forward(self, input_ids, attention_mask):
-        pass
+    def forward(self, input_ids, attention_mask=None):
+        torch.manual_seed(42)  # Reset seed before forward pass
+        x = self.embeddings["word_embeddings"](input_ids)
+        positions = torch.arange(input_ids.size(1), device=input_ids.device)
+        x = x + self.embeddings["position_embeddings"](positions)
+        x = x + self.embeddings["token_type_embeddings"](torch.zeros_like(input_ids))
+        x = self.embeddings["LayerNorm"](x)
+        for layer in self.encoder["layer"]:
+            x = layer(x, attention_mask)
+        x = self.pooler["dense"](x)
+        return x
