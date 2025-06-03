@@ -119,3 +119,23 @@ class BertModel(nn.Module):
             x = layer(x, attention_mask)
         x = self.pooler["dense"](x)
         return x
+
+
+class BertForMaskedLM(nn.Module):
+    def __init__(self, config: BertConfig):
+        super().__init__()
+        self.config = config
+        self.bert = BertModel(config)
+        self.transform = nn.Sequential(
+            nn.Linear(config.d_model, config.d_model),
+            nn.GELU(),
+            nn.LayerNorm(config.d_model),
+        )
+        self.decoder = nn.Linear(config.d_model, config.vocab_size, bias=True)
+        self.decoder.weight = self.bert.embeddings["word_embeddings"].weight
+
+    def forward(self, input_ids, attention_mask=None):
+        x = self.bert(input_ids, attention_mask)
+        x = self.transform(x)
+        x = self.decoder(x)
+        return x
