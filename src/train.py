@@ -1,5 +1,7 @@
 import numpy as np
 import torch
+import torch.nn as nn
+from model import BertConfig, BertForMaskedLM
 
 
 def load_data(path: str) -> torch.Tensor:
@@ -50,3 +52,50 @@ class ShakespeareDataset:
             self.state = 0
 
         return batch_seq, labels
+
+
+# add training loop
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+
+
+torch.manual_seed(1478)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1478)
+elif torch.backends.mps.is_available():
+    torch.mps.manual_seed(1478)
+
+bert_config = BertConfig(num_layers=1)
+model = BertForMaskedLM(bert_config).to(device)
+
+# Count model parameters
+total_params = sum(p.numel() for p in model.parameters())
+trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Total parameters: {total_params:,}")
+print(f"Trainable parameters: {trainable_params:,}")
+
+dataset = ShakespeareDataset(
+    "data/tokenized_train.npy", 32, 8, vocab_size=bert_config.vocab_size
+)
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+max_steps = 100
+for step in range(max_steps + 1):
+    x, y = dataset.next_batch()
+    x = x.to(device)
+    y = y.to(device)
+    logits = model(x)
+    optimizer.zero_grad()
+    loss = torch.nn.functional.cross_entropy(
+        logits.view(-1, bert_config.vocab_size), y.view(-1), ignore_index=-100
+    )
+    loss.backward()
+    optimizer.step()
+    if step % 10 == 0 or step == max_steps:
+        print(f"Step {step} loss: {loss.item()}")
+# TODO: check initialization to see if we can get expected value for initial loss
