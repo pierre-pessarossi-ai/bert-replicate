@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import torch.nn as nn
 from model import BertConfig, BertForMaskedLM
 
 
@@ -70,7 +69,7 @@ if torch.cuda.is_available():
 elif torch.backends.mps.is_available():
     torch.mps.manual_seed(1478)
 
-bert_config = BertConfig(num_layers=1)
+bert_config = BertConfig()
 model = BertForMaskedLM(bert_config).to(device)
 
 # Count model parameters
@@ -80,10 +79,10 @@ print(f"Total parameters: {total_params:,}")
 print(f"Trainable parameters: {trainable_params:,}")
 
 dataset = ShakespeareDataset(
-    "data/tokenized_train.npy", 32, 8, vocab_size=bert_config.vocab_size
+    "data/tokenized_train.npy", 64, 16, vocab_size=bert_config.vocab_size
 )
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 max_steps = 100
 for step in range(max_steps + 1):
     x, y = dataset.next_batch()
