@@ -32,6 +32,7 @@ class MultiHeadAttention(nn.Module):
                 "LayerNorm": nn.LayerNorm(config.d_model),
             }
         )
+        self.output["dense"].SCALE_INIT_FLAG = True
 
     def forward(self, x, attention_mask=None):
         batch, block_size, d_model = x.size()
@@ -72,6 +73,7 @@ class EncoderLayer(nn.Module):
                 "LayerNorm": nn.LayerNorm(config.d_model),
             }
         )
+        self.output["dense"].SCALE_INIT_FLAG = True
 
     def forward(self, x, attention_mask=None):
         x_attention = self.attention(x, attention_mask)
@@ -132,7 +134,20 @@ class BertForMaskedLM(nn.Module):
             nn.LayerNorm(config.d_model),
         )
         self.decoder = nn.Linear(config.d_model, config.vocab_size, bias=True)
-        self.decoder.weight = self.bert.embeddings["word_embeddings"].weight
+        self.bert.embeddings["word_embeddings"].weight = self.decoder.weight
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            std = 0.02
+            if hasattr(module, "SCALE_INIT_FLAG"):
+                std *= (2 * self.config.num_layers) ** -0.5
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            std = 0.02
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
 
     def forward(self, input_ids, attention_mask=None):
         x = self.bert(input_ids, attention_mask)
