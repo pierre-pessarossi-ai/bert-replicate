@@ -85,7 +85,7 @@ print(f"Total parameters: {total_params:,}")
 print(f"Trainable parameters: {trainable_params:,}")
 
 dataset = ShakespeareDataset(
-    "data/tokenized_train.npy", 64, 16, vocab_size=bert_config.vocab_size
+    "data/tokenized_train.npy", 64, 128, vocab_size=bert_config.vocab_size
 )
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
@@ -95,7 +95,8 @@ for step in range(max_steps + 1):
     x, y = dataset.next_batch()
     x = x.to(device)
     y = y.to(device)
-    logits = model(x)
+    with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+        logits = model(x)
     optimizer.zero_grad()
     loss = torch.nn.functional.cross_entropy(
         logits.view(-1, bert_config.vocab_size), y.view(-1), ignore_index=-100
@@ -108,3 +109,17 @@ for step in range(max_steps + 1):
         print(
             f"Step {step} loss: {loss.item()}, time: {t1 - t0:.2f}s, tokens/sec: {tokens_per_sec:.2f}"
         )
+
+# Total parameters: 110,104,890
+# Trainable parameters: 110,104,890
+# Step 0 loss: 10.4375, time: 19.53s, tokens/sec: 419.41
+# Step 10 loss: 9.6875, time: 0.06s, tokens/sec: 129341.16
+# Step 20 loss: 9.25, time: 0.06s, tokens/sec: 129397.66
+# Step 30 loss: 9.1875, time: 0.06s, tokens/sec: 129363.56
+# Step 40 loss: 5.03125, time: 0.06s, tokens/sec: 129346.03
+# Step 50 loss: 2.71875, time: 0.06s, tokens/sec: 129366.00
+# Step 60 loss: 2.515625, time: 0.06s, tokens/sec: 129221.01
+# Step 70 loss: 2.4375, time: 0.06s, tokens/sec: 129353.82
+# Step 80 loss: 2.296875, time: 0.06s, tokens/sec: 128920.89
+# Step 90 loss: 2.0625, time: 0.06s, tokens/sec: 128563.45
+# Step 100 loss: 1.9765625, time: 0.06s, tokens/sec: 128962.51
