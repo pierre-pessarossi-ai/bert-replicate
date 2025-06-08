@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import torch
 from model import BertConfig, BertForMaskedLM
@@ -69,8 +70,13 @@ if torch.cuda.is_available():
 elif torch.backends.mps.is_available():
     torch.mps.manual_seed(1478)
 
+torch.set_float32_matmul_precision("high")
+
 bert_config = BertConfig()
 model = BertForMaskedLM(bert_config).to(device)
+
+if torch.cuda.is_available():
+    model = torch.compile(model)
 
 # Count model parameters
 total_params = sum(p.numel() for p in model.parameters())
@@ -85,6 +91,7 @@ dataset = ShakespeareDataset(
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
 max_steps = 100
 for step in range(max_steps + 1):
+    t0 = time.time()
     x, y = dataset.next_batch()
     x = x.to(device)
     y = y.to(device)
@@ -95,6 +102,9 @@ for step in range(max_steps + 1):
     )
     loss.backward()
     optimizer.step()
+    t1 = time.time()
+    tokens_per_sec = dataset.batch_size * dataset.context_length / (t1 - t0)
     if step % 10 == 0 or step == max_steps:
-        print(f"Step {step} loss: {loss.item()}")
-# TODO: check initialization to see if we can get expected value for initial loss
+        print(
+            f"Step {step} loss: {loss.item()}, time: {t1 - t0:.2f}s, tokens/sec: {tokens_per_sec:.2f}"
+        )
