@@ -6,7 +6,7 @@ import torch
 
 @dataclass
 class BertConfig:
-    vocab_size: int = 30522
+    vocab_size: int = 30528
     d_model: int = 768
     n_hidden_size: int = 3072
     n_types: int = 2
